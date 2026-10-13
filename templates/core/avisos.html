@@ -1,0 +1,82 @@
+{% extends "core/layout_painel.html" %}
+{% load core_icons %}
+{% block title %}Avisos — Material Didático{% endblock %}
+
+{% block extra_head %}
+  <style>
+    .recado-item { padding: 0.9rem 0; border-bottom: 1px solid var(--cor-borda); display: flex; gap: 1rem; justify-content: space-between; align-items: flex-start; }
+    .recado-item:last-child { border-bottom: none; }
+    .recado-item .corpo { overflow-wrap: anywhere; }
+    .botao-perigo { background: var(--cor-erro); }
+    .botao-perigo:hover { background: #8a0019; }
+    .botao-neutro { background: var(--cor-fundo); color: var(--cor-texto); }
+    .botao-neutro:hover { background: var(--cor-borda); }
+  </style>
+{% endblock %}
+
+{% block conteudo_painel %}
+  <h1 style="font-size: 1.4rem; margin-top: 0; margin-bottom: 0.15rem;">Avisos</h1>
+  <p class="texto-suave" style="margin-top: 0;">
+    Os recados abaixo aparecem para todos no quadro <strong>Informações</strong> da página inicial.
+  </p>
+
+  {% for message in messages %}
+    <div class="alerta alerta-sucesso">{{ message }}</div>
+  {% endfor %}
+
+  <section class="cartao" style="padding: 1.25rem; margin-top: 1.25rem; max-width: 640px;">
+    <h2 style="margin: 0 0 1rem; font-size: 1.05rem;">Novo aviso</h2>
+    <form method="post" action="{{ request.path }}">
+      {% csrf_token %}
+      <div class="campo">
+        <label for="{{ form.titulo.id_for_label }}">{{ form.titulo.label }}</label>
+        {{ form.titulo }}
+        {% for erro in form.titulo.errors %}<span class="erro">{{ erro }}</span>{% endfor %}
+      </div>
+      <div class="campo">
+        <label for="{{ form.texto.id_for_label }}">{{ form.texto.label }}</label>
+        {{ form.texto }}
+        <span class="texto-suave" style="font-size: 0.78rem;">Até 500 caracteres.</span>
+        {% for erro in form.texto.errors %}<span class="erro" style="display: block;">{{ erro }}</span>{% endfor %}
+      </div>
+      <button type="submit">Publicar aviso</button>
+    </form>
+  </section>
+
+  <section class="cartao" style="padding: 1.25rem; margin-top: 1.25rem; max-width: 640px;">
+    <h2 style="margin: 0 0 0.5rem; font-size: 1.05rem;">Avisos publicados</h2>
+    {% for aviso in avisos %}
+      <div class="recado-item">
+        <div class="corpo">
+          {% if aviso.titulo %}<strong>{{ aviso.titulo }}</strong><br>{% endif %}
+          {{ aviso.texto|linebreaksbr }}
+          <div class="texto-suave" style="font-size: 0.78rem; margin-top: 0.3rem;">{{ aviso.criado_em|date:"d/m/Y H:i" }}</div>
+        </div>
+        <a href="#modal-apagar-{{ aviso.pk }}" class="erro" style="font-size: 0.85rem; white-space: nowrap;">Apagar</a>
+      </div>
+    {% empty %}
+      <p class="texto-suave" style="margin: 0.5rem 0 0;">Nenhum aviso publicado ainda.</p>
+    {% endfor %}
+  </section>
+
+  {% for aviso in avisos %}
+    <div id="modal-apagar-{{ aviso.pk }}" class="modal-overlay">
+      <div class="modal-conteudo pequeno cartao">
+        <a href="{{ request.path }}" class="modal-fechar" aria-label="Fechar">{% icone "x" 20 %}</a>
+        <h2 style="margin-top: 0; margin-bottom: 0.6rem; font-size: 1.05rem;">Apagar aviso?</h2>
+        <p class="texto-suave" style="margin-top: 0;">
+          Ele deixa de aparecer na página inicial. Essa ação não pode ser desfeita.
+        </p>
+        <div style="display: flex; gap: 0.75rem; margin-top: 1.1rem;">
+          <a href="{{ request.path }}" class="botao botao-neutro">Cancelar</a>
+          <form method="post" action="{{ request.path }}" style="margin: 0;">
+            {% csrf_token %}
+            <input type="hidden" name="acao" value="excluir">
+            <input type="hidden" name="aviso_id" value="{{ aviso.pk }}">
+            <button type="submit" class="botao-perigo">Apagar</button>
+          </form>
+        </div>
+      </div>
+    </div>
+  {% endfor %}
+{% endblock %}

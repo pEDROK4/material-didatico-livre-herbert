@@ -1,12 +1,14 @@
+from datetime import timedelta
 from unittest import mock
 
 from django.contrib.auth import get_user_model
 from django.db import OperationalError
 from django.test import TestCase, override_settings
+from django.utils import timezone
 
-from questoes.models import Frente
+from questoes.models import Assunto, Frente, Questao
 
-from .models import ConfiguracaoSistema, PerfilProfessor
+from .models import Aviso, ConfiguracaoSistema, Evento, PerfilProfessor
 
 Usuario = get_user_model()
 
@@ -159,3 +161,131 @@ class BotaoSairNaManutencaoTests(TestCase):
         resposta = self.client.get("/painel/")
         self.assertNotContains(resposta, ">Sair<")
         self.assertNotContains(resposta, "Coordenação?")
+
+
+class PainelCompromissosTests(TestCase):
+    """Card "Avisos" da página inicial: próximos compromissos do calendário."""
+
+    def setUp(self):
+        self.hoje = timezone.localdate()
+        self.client.force_login(Usuario.objects.create_user("prof", password="x"))
+
+    def evento(self, titulo, dias_inicio, dias_fim=None):
+        return Evento.objects.create(
+            titulo=titulo,
+            data=self.hoje + timedelta(days=dias_inicio),
+            data_fim=self.hoje + timedelta(days=dias_fim) if dias_fim is not None else None,
+        )
+
+    def test_so_aparecem_compromissos_que_ainda_nao_terminaram(self):
+        self.evento("Evento passado", -5)
+        self.evento("Evento multi-dia que já acabou", -5, -2)
+        self.evento("Evento de hoje", 0)
+        resposta = self.client.get("/painel/")
+        self.assertContains(resposta, "Evento de hoje")
+        self.assertNotContains(resposta, "Evento passado")
+        self.assertNotContains(resposta, "já acabou")
+
+    def test_rotulos_e_ordem_por_data(self):
+        self.evento("C-longe", 10)
+        self.evento("B-amanha", 1)
+        self.evento("A-hoje", 0)
+        self.evento("Z-andamento", -1, 2)
+        resposta = self.client.get("/painel/")
+        compromissos = resposta.context["proximos_compromissos"]
+        self.assertEqual(
+            [(c["evento"].titulo, c["rotulo"]) for c in compromissos],
+            [
+                ("Z-andamento", "Em andamento"),
+                ("A-hoje", "Hoje"),
+                ("B-amanha", "Amanhã"),
+                ("C-longe", "Em 10 dias"),
+            ],
+        )
+
+    def test_sem_compromissos_mostra_mensagem(self):
+        self.assertContains(self.client.get("/painel/"), "Nenhum compromisso marcado")
+
+
+class PainelMetasTests(TestCase):
+    def test_metas_de_aulas_e_questoes_com_13_por_aula(self):
+        autor = Usuario.objects.create_user("autor", password="x")
+        frente = Frente.objects.get(disciplina__nome="Biologia", letra="A")
+        assunto = Assunto.objects.create(frente=frente, nome="Citologia", aula=1)
+        for i in range(26):
+            Questao.objects.create(assunto=assunto, enunciado=f"q{i}", autor=autor)
+
+        self.client.force_login(autor)
+        metas = self.client.get("/painel/").context["metas"]
+
+        possiveis = sum(f.limite_aula for f in Frente.objects.all())
+        self.assertEqual(metas["por_aula"], 13)
+        self.assertEqual(metas["aulas_possiveis"], possiveis)
+        self.assertEqual(metas["aulas_cadastradas"], 1)
+        self.assertEqual(metas["meta_questoes"], possiveis * 13)
+        self.assertEqual(metas["questoes"], 26)
+        self.assertEqual(metas["questoes_faltando"], possiveis * 13 - 26)
+        self.assertEqual(metas["media_atual"], 26.0)
+
+    def test_pagina_abre_sem_nenhuma_aula_cadastrada(self):
+        self.client.force_login(Usuario.objects.create_user("p", password="x"))
+        resposta = self.client.get("/painel/")
+        self.assertEqual(resposta.status_code, 200)
+        self.assertEqual(resposta.context["metas"]["media_atual"], 0)
+
+
+class AvisosTests(TestCase):
+    """Quadro "Informações" e a tela de avisos (só coordenação)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.prof = Usuario.objects.create_user("prof", password="x")
+        cls.coord = Usuario.objects.create_superuser("coord", password="x")
+        cls.url = "/painel/avisos/"
+
+    def test_coordenacao_publica_e_todos_veem_no_painel(self):
+        self.client.force_login(self.coord)
+        resposta = self.client.post(self.url, {"titulo": "Reunião", "texto": "Sexta às 19h"})
+        self.assertRedirects(resposta, self.url, fetch_redirect_response=False)
+        aviso = Aviso.objects.get()
+        self.assertEqual(aviso.criado_por, self.coord)
+
+        self.client.force_login(self.prof)
+        painel = self.client.get("/painel/")
+        self.assertContains(painel, "Reunião")
+        self.assertContains(painel, "Sexta às 19h")
+        self.assertNotContains(painel, "Gerenciar avisos")
+
+    def test_titulo_e_opcional_mas_texto_nao(self):
+        self.client.force_login(self.coord)
+        self.client.post(self.url, {"titulo": "", "texto": "só o texto"})
+        self.assertEqual(Aviso.objects.count(), 1)
+        self.client.post(self.url, {"titulo": "sem texto", "texto": ""})
+        self.assertEqual(Aviso.objects.count(), 1)
+
+    def test_texto_com_html_nao_e_executado(self):
+        Aviso.objects.create(texto="<script>alert(1)</script>")
+        self.client.force_login(self.prof)
+        resposta = self.client.get("/painel/")
+        self.assertNotContains(resposta, "<script>alert(1)</script>")
+        self.assertContains(resposta, "&lt;script&gt;")
+
+    def test_coordenacao_apaga_aviso(self):
+        aviso = Aviso.objects.create(texto="apagar")
+        self.client.force_login(self.coord)
+        self.client.post(self.url, {"acao": "excluir", "aviso_id": aviso.pk})
+        self.assertFalse(Aviso.objects.exists())
+
+    def test_professor_nao_acessa_nem_cria_nem_apaga(self):
+        aviso = Aviso.objects.create(texto="fica")
+        self.client.force_login(self.prof)
+        self.assertEqual(self.client.get(self.url).status_code, 302)
+        self.client.post(self.url, {"texto": "invasão"})
+        self.client.post(self.url, {"acao": "excluir", "aviso_id": aviso.pk})
+        self.assertEqual(list(Aviso.objects.values_list("texto", flat=True)), ["fica"])
+
+    def test_menu_avisos_so_para_coordenacao(self):
+        self.client.force_login(self.prof)
+        self.assertNotContains(self.client.get("/painel/"), 'href="/painel/avisos/"')
+        self.client.force_login(self.coord)
+        self.assertContains(self.client.get("/painel/"), 'href="/painel/avisos/"')

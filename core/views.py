@@ -13,13 +13,15 @@ from django.db.models import Q
 from django.http import HttpResponse, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
+from django.utils import timezone
 from django.views.generic import TemplateView
 
+from questoes.metas import calcular_metas
 from questoes.models import Disciplina, Frente
 
-from .forms import EventoForm, PerfilForm
+from .forms import AvisoForm, EventoForm, PerfilForm
 from .middleware import manutencao_ativa
-from .models import ConfiguracaoSistema, Evento, PerfilProfessor
+from .models import Aviso, ConfiguracaoSistema, Evento, PerfilProfessor
 
 
 def raiz(request):
@@ -74,14 +76,70 @@ def contato(request):
     return render(request, "core/contato.html")
 
 
+def _rotulo_do_prazo(evento, hoje):
+    if evento.data > hoje:
+        dias = (evento.data - hoje).days
+        return "Amanhã" if dias == 1 else f"Em {dias} dias"
+    return "Hoje" if evento.data == hoje else "Em andamento"
+
+
 @login_required
 def painel(request):
     """
-    Dashboard inicial, mostrada depois do login. As seções de avisos,
-    metas e informações são só o espaço reservado por enquanto — o
-    conteúdo de verdade entra depois.
+    Página inicial, com três cards:
+
+    - Avisos: todos os próximos compromissos do cronograma (eventos que
+      ainda não terminaram, em ordem de data).
+    - Metas: objetivo de aulas e de questões (13 por aula) e o quanto já foi
+      cadastrado.
+    - Informações: o quadro de recados que a coordenação escreve na tela
+      "Avisos" do menu.
     """
-    return render(request, "core/painel.html")
+    hoje = timezone.localdate()
+
+    eventos = Evento.objects.filter(Q(data__gte=hoje) | Q(data_fim__gte=hoje)).order_by(
+        "data", "hora"
+    )
+    proximos_compromissos = [
+        {"evento": evento, "rotulo": _rotulo_do_prazo(evento, hoje)} for evento in eventos
+    ]
+
+    return render(
+        request,
+        "core/painel.html",
+        {
+            "proximos_compromissos": proximos_compromissos,
+            "metas": calcular_metas(),
+            "avisos": Aviso.objects.all(),
+        },
+    )
+
+
+@login_required
+@user_passes_test(lambda usuario: usuario.is_superuser, login_url="core:painel")
+def avisos(request):
+    """
+    Tela só da coordenação: escreve e apaga os recados que aparecem no
+    quadro "Informações" da página inicial.
+    """
+    form = AvisoForm()
+
+    if request.method == "POST":
+        if request.POST.get("acao") == "excluir":
+            aviso = get_object_or_404(Aviso, pk=request.POST.get("aviso_id"))
+            aviso.delete()
+            messages.success(request, "Aviso apagado.")
+            return redirect("core:avisos")
+
+        form = AvisoForm(request.POST)
+        if form.is_valid():
+            aviso = form.save(commit=False)
+            aviso.criado_por = request.user
+            aviso.save()
+            messages.success(request, "Aviso publicado.")
+            return redirect("core:avisos")
+
+    return render(request, "core/avisos.html", {"form": form, "avisos": Aviso.objects.all()})
 
 
 @login_required

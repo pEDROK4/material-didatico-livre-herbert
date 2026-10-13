@@ -1,39 +1,135 @@
 {% extends "core/layout_painel.html" %}
 {% load core_icons %}
 {% block title %}Painel — Material Didático {% endblock %}
+
+{% block extra_head %}
+  <style>
+    .grade-painel {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 1.25rem;
+      margin-top: 1.5rem;
+      align-items: start;
+    }
+    .card-painel { padding: 1.25rem; }
+    .card-painel h2 {
+      font-size: 1rem;
+      margin: 0 0 0.9rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .lista-rolavel { max-height: 22rem; overflow-y: auto; margin: 0 -0.25rem; padding: 0 0.25rem; }
+    .compromisso { padding: 0.65rem 0; border-bottom: 1px solid var(--cor-borda); }
+    .compromisso:last-child { border-bottom: none; }
+    .compromisso-topo { display: flex; justify-content: space-between; gap: 0.75rem; align-items: baseline; }
+    .compromisso-titulo { font-weight: 600; font-size: 0.92rem; }
+    .compromisso-quando { font-size: 0.8rem; color: var(--cor-texto-suave); margin-top: 0.1rem; }
+    .selo-prazo {
+      font-size: 0.72rem; font-weight: 600; white-space: nowrap;
+      padding: 0.1rem 0.5rem; border-radius: 999px; background: #eaefff; color: var(--cor-primaria);
+    }
+    .selo-prazo.hoje { background: #fbe9ec; color: var(--cor-erro); }
+    .meta { margin-bottom: 1.1rem; }
+    .meta:last-child { margin-bottom: 0; }
+    .meta-topo { display: flex; justify-content: space-between; align-items: baseline; font-size: 0.88rem; margin-bottom: 0.35rem; }
+    .meta-topo strong { font-size: 0.95rem; }
+    .meta-barra { background: var(--cor-fundo); border-radius: 999px; height: 0.65rem; overflow: hidden; }
+    .meta-barra div { background: var(--cor-primaria); height: 100%; border-radius: 999px; }
+    .meta-detalhe { font-size: 0.78rem; color: var(--cor-texto-suave); margin-top: 0.35rem; }
+    .recado { padding: 0.7rem 0.85rem; background: #fffbe8; border: 1px solid #f1e6a8; border-radius: 8px; margin-bottom: 0.65rem; }
+    .recado:last-child { margin-bottom: 0; }
+    .recado-titulo { font-weight: 600; font-size: 0.9rem; margin-bottom: 0.15rem; }
+    .recado-texto { font-size: 0.88rem; overflow-wrap: anywhere; }
+    .recado-data { font-size: 0.72rem; color: var(--cor-texto-suave); margin-top: 0.3rem; }
+  </style>
+{% endblock %}
+
 {% block conteudo_painel %}
   <h1 style="font-size: 1.4rem; margin-top: 0;">Olá, {{ primeiro_nome }}</h1>
   <p class="texto-suave" style="margin-top: -0.5rem;">Aqui vai um resumo do que está acontecendo.</p>
 
-  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1.25rem; margin-top: 1.5rem;">
+  <div class="grade-painel">
 
-    <section class="cartao" style="padding: 1.25rem;">
-      <h2 style="font-size: 1rem; margin-top: 0; display: flex; align-items: center; gap: 0.5rem;">
-        {% icone "bell" %} Avisos
-      </h2>
-      <p class="texto-suave" style="font-size: 0.9rem;">
-        Nenhum aviso configurado ainda — em breve, comunicados da
-        coordenação aparecem aqui.
-      </p>
+    <section class="cartao card-painel">
+      <h2>{% icone "calendar" %} Avisos</h2>
+      {% if proximos_compromissos %}
+        <div class="lista-rolavel">
+          {% for item in proximos_compromissos %}
+            <div class="compromisso">
+              <div class="compromisso-topo">
+                <span class="compromisso-titulo">{{ item.evento.titulo }}</span>
+                <span class="selo-prazo{% if item.rotulo == 'Hoje' or item.rotulo == 'Em andamento' %} hoje{% endif %}">{{ item.rotulo }}</span>
+              </div>
+              <div class="compromisso-quando">
+                {% if item.evento.dura_mais_de_um_dia %}
+                  {{ item.evento.data|date:"d/m" }} a {{ item.evento.data_fim|date:"d/m" }}
+                {% else %}
+                  {{ item.evento.data|date:"D, d/m" }}
+                {% endif %}
+                {% if item.evento.hora %}· {{ item.evento.hora|time:"H:i" }}{% endif %}
+              </div>
+              {% if item.evento.descricao %}
+                <div class="texto-suave" style="font-size: 0.82rem; margin-top: 0.2rem;">{{ item.evento.descricao }}</div>
+              {% endif %}
+            </div>
+          {% endfor %}
+        </div>
+      {% else %}
+        <p class="texto-suave" style="font-size: 0.9rem; margin: 0;">Nenhum compromisso marcado no calendário.</p>
+      {% endif %}
+      <p style="margin: 0.9rem 0 0; font-size: 0.85rem;"><a href="{% url 'core:cronograma' %}">Ver cronograma completo →</a></p>
     </section>
 
-    <section class="cartao" style="padding: 1.25rem;">
-      <h2 style="font-size: 1rem; margin-top: 0; display: flex; align-items: center; gap: 0.5rem;">
-        {% icone "target" %} Metas
-      </h2>
-      <p class="texto-suave" style="font-size: 0.9rem;">
-        Em breve, o progresso de metas (ex: questões cadastradas no mês)
-        aparece aqui.
-      </p>
+    <section class="cartao card-painel">
+      <h2>{% icone "target" %} Metas</h2>
+
+      <div class="meta">
+        <div class="meta-topo">
+          <span>Aulas cadastradas</span>
+          <strong>{{ metas.aulas_cadastradas }} <span class="texto-suave" style="font-weight: 400;">de {{ metas.aulas_possiveis }}</span></strong>
+        </div>
+        <div class="meta-barra"><div style="width: {{ metas.aulas_percentual }}%;"></div></div>
+        <div class="meta-detalhe">{{ metas.aulas_percentual }}% do conteúdo planejado</div>
+      </div>
+
+      <div class="meta">
+        <div class="meta-topo">
+          <span>Questões cadastradas</span>
+          <strong>{{ metas.questoes }} <span class="texto-suave" style="font-weight: 400;">de {{ metas.meta_questoes }}</span></strong>
+        </div>
+        <div class="meta-barra"><div style="width: {{ metas.questoes_percentual }}%;"></div></div>
+        <div class="meta-detalhe">
+          {{ metas.questoes_percentual }}% da meta de {{ metas.por_aula }} questões por aula
+          · faltam {{ metas.questoes_faltando }}
+        </div>
+      </div>
+
+      {% if metas.aulas_cadastradas %}
+        <p class="texto-suave" style="font-size: 0.8rem; margin: 1rem 0 0;">
+          Média atual: {{ metas.media_atual }} questões por aula cadastrada (meta: {{ metas.por_aula }}).
+        </p>
+      {% endif %}
     </section>
 
-    <section class="cartao" style="padding: 1.25rem;">
-      <h2 style="font-size: 1rem; margin-top: 0; display: flex; align-items: center; gap: 0.5rem;">
-        {% icone "info" %} Informações
-      </h2>
-      <p class="texto-suave" style="font-size: 0.9rem;">
-        Espaço reservado para informações gerais do banco de questões.
-      </p>
+    <section class="cartao card-painel">
+      <h2>{% icone "info" %} Informações</h2>
+      {% if avisos %}
+        <div class="lista-rolavel">
+          {% for aviso in avisos %}
+            <div class="recado">
+              {% if aviso.titulo %}<div class="recado-titulo">{{ aviso.titulo }}</div>{% endif %}
+              <div class="recado-texto">{{ aviso.texto|linebreaksbr }}</div>
+              <div class="recado-data">{{ aviso.criado_em|date:"d/m/Y" }}</div>
+            </div>
+          {% endfor %}
+        </div>
+      {% else %}
+        <p class="texto-suave" style="font-size: 0.9rem; margin: 0;">Nenhum recado da coordenação por enquanto.</p>
+      {% endif %}
+      {% if user.is_superuser %}
+        <p style="margin: 0.9rem 0 0; font-size: 0.85rem;"><a href="{% url 'core:avisos' %}">Gerenciar avisos →</a></p>
+      {% endif %}
     </section>
 
   </div>

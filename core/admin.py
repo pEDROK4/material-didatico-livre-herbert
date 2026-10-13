@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Evento, PerfilProfessor
+from .models import Aviso, Evento, PerfilProfessor
 
 
 @admin.register(Evento)
@@ -24,3 +24,8 @@ class PerfilProfessorAdmin(admin.ModelAdmin):
     list_filter = ["senha_provisoria"]
     search_fields = ["usuario__username", "nome_completo", "faculdade", "telefone"]
     autocomplete_fields = ["usuario"]
+
+
+@admin.register(Aviso)
+class AvisoAdmin(admin.ModelAdmin):
+    list_display = ["__str__", "criado_por", "criado_em"]

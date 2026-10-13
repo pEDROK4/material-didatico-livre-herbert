@@ -1,6 +1,6 @@
 from django import forms
 
-from .models import Evento, PerfilProfessor
+from .models import Aviso, Evento, PerfilProfessor
 
 
 class EventoForm(forms.ModelForm):
@@ -49,4 +49,15 @@ class PerfilForm(forms.ModelForm):
         }
         widgets = {
             "descricao": forms.Textarea(attrs={"rows": 4}),
+        }
+
+
+class AvisoForm(forms.ModelForm):
+    class Meta:
+        model = Aviso
+        fields = ["titulo", "texto"]
+        labels = {"titulo": "Título (opcional)", "texto": "Aviso"}
+        widgets = {
+            "titulo": forms.TextInput(attrs={"maxlength": 80}),
+            "texto": forms.Textarea(attrs={"rows": 3, "maxlength": 500}),
         }

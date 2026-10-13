@@ -61,6 +61,11 @@ urlpatterns = [
         name="colaboradores",
     ),
     path(
+        "painel/avisos/",
+        views.avisos,
+        name="avisos",
+    ),
+    path(
         "painel/configuracoes/",
         views.configuracoes,
         name="configuracoes",

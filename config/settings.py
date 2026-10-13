@@ -97,6 +97,9 @@ MIDDLEWARE = [
     "core.middleware.ForcarTrocaSenhaMiddleware",
 ]
 
+# Meta de questões por aula (usada no card "Metas" da página inicial).
+META_QUESTOES_POR_AULA = 13
+
 # Modo manutenção: com MODO_MANUTENCAO=True, só a coordenação (superusuário)
 # usa o site; todos os outros veem a página de manutenção (HTTP 503).
 MODO_MANUTENCAO = env_bool("MODO_MANUTENCAO", default=False)

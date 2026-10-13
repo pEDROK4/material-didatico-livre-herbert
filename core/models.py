@@ -157,3 +157,29 @@ class ConfiguracaoSistema(models.Model):
     def carregar(cls):
         configuracao, _ = cls.objects.get_or_create(pk=1)
         return configuracao
+
+
+class Aviso(models.Model):
+    """
+    Pequeno recado da coordenação, mostrado no quadro "Informações" da
+    página inicial. Só a coordenação (superusuário) cria e apaga.
+    """
+
+    titulo = models.CharField(max_length=80, blank=True)
+    texto = models.TextField(max_length=500)
+    criado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="avisos_criados",
+    )
+    criado_em = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-criado_em"]
+        verbose_name = "Aviso"
+        verbose_name_plural = "Avisos"
+
+    def __str__(self):
+        return self.titulo or self.texto[:40]
