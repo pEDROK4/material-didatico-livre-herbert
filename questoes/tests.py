@@ -1,5 +1,5 @@
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from .forms import AssuntoForm
@@ -189,3 +189,62 @@ class MatematicaBasicaTests(TestCase):
         self.assertEqual(len(frentes), 1)
         self.assertEqual(frentes[0].limite_aula, 30)
         self.assertEqual(Disciplina.objects.get(nome="Matemática").frentes.count(), 2)
+
+
+@override_settings(
+    STORAGES={
+        "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+        "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
+    }
+)
+class EditarQuestaoTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        frente = Frente.objects.get(disciplina__nome="Biologia", letra="A")
+        cls.assunto = Assunto.objects.create(frente=frente, nome="Células", aula=1)
+        cls.autor = Usuario.objects.create_user("autor", password="x")
+        cls.outro = Usuario.objects.create_user("outro", password="x")
+        frente.professores.add(cls.autor, cls.outro)
+        cls.coord = Usuario.objects.create_superuser("coord", password="x")
+        cls.questao = Questao.objects.create(
+            assunto=cls.assunto, enunciado="<p>Antigo</p>", autoria_propria=True, autor=cls.autor
+        )
+        Alternativa.objects.create(questao=cls.questao, letra="A", texto="um", correta=True)
+        Alternativa.objects.create(questao=cls.questao, letra="B", texto="dois")
+        cls.url = reverse("core:questoes_editar", args=[cls.questao.pk])
+
+    def dados(self, **extra):
+        base = {
+            "assunto": self.assunto.pk,
+            "enunciado": "<p>Novo</p>",
+            "autoria_propria": "on",
+            "alternativa_a": "$x^2$",
+            "alternativa_b": "$$\\frac{a}{b}$$",
+            "correta": "b",
+        }
+        base.update(extra)
+        return base
+
+    def test_autor_edita_enunciado_e_alternativas_com_latex(self):
+        self.client.force_login(self.autor)
+        self.assertContains(self.client.get(self.url), "um")
+        resposta = self.client.post(self.url, self.dados())
+        self.assertRedirects(resposta, reverse("core:questoes_listar"))
+        self.questao.refresh_from_db()
+        self.assertEqual(self.questao.enunciado, "<p>Novo</p>")
+        alternativas = {a.letra: a for a in self.questao.alternativas.all()}
+        self.assertEqual(alternativas["A"].texto, "$x^2$")
+        self.assertTrue(alternativas["B"].correta)
+        self.assertFalse(alternativas["A"].correta)
+
+    def test_outro_professor_nao_edita(self):
+        self.client.force_login(self.outro)
+        self.client.post(self.url, self.dados())
+        self.questao.refresh_from_db()
+        self.assertEqual(self.questao.enunciado, "<p>Antigo</p>")
+
+    def test_coordenacao_edita(self):
+        self.client.force_login(self.coord)
+        self.client.post(self.url, self.dados())
+        self.questao.refresh_from_db()
+        self.assertEqual(self.questao.enunciado, "<p>Novo</p>")

@@ -31,6 +31,11 @@ urlpatterns = [
         name="questoes_adicionar",
     ),
     path(
+        "painel/questoes/<int:pk>/editar/",
+        questoes_views.editar_questao,
+        name="questoes_editar",
+    ),
+    path(
         "painel/questoes/upload-imagem/",
         questoes_views.upload_imagem_editor,
         name="upload_imagem_editor",

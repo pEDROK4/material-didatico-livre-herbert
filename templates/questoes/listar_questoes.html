@@ -40,6 +40,10 @@
     </a>
   </div>
 
+  {% for message in messages %}
+    <div class="alerta {% if message.tags == 'error' %}alerta-erro{% else %}alerta-sucesso{% endif %}" style="margin-top: 1rem;">{{ message }}</div>
+  {% endfor %}
+
   <form method="get" class="cartao" style="padding: 1.25rem; margin-top: 1.25rem;">
     <div class="grade-filtros">
       <div class="campo">
@@ -108,7 +112,7 @@
           {% for alternativa in questao.alternativas.all %}
             <li class="{% if alternativa.correta %}correta{% endif %}">
               <strong>{{ alternativa.letra }})</strong>
-              <span>{{ alternativa.texto }}</span>
+              <span class="texto-alternativa">{{ alternativa.texto }}</span>
               {% if alternativa.correta %}{% icone "check-circle" 16 %}{% endif %}
             </li>
           {% endfor %}
@@ -116,6 +120,9 @@
 
         <p class="texto-suave" style="font-size: 0.8rem; margin-top: 0.9rem; margin-bottom: 0;">
           Cadastrada por {{ questao.autor }} em {{ questao.criado_em|date:"d/m/Y" }}
+          {% if request.user.is_superuser or questao.autor_id == request.user.pk %}
+            · <a href="{% url 'core:questoes_editar' questao.pk %}">Editar</a>
+          {% endif %}
         </p>
       </article>
     {% empty %}
@@ -138,7 +145,11 @@
 
 {% block body %}{{ block.super }}
   <script src="{% static 'vendor/katex/katex.min.js' %}"></script>
+  <script src="{% static 'js/latex_alternativas.js' %}"></script>
   <script>
+    document.querySelectorAll(".texto-alternativa").forEach(function (el) {
+      if (el.textContent.indexOf("$") !== -1) window.renderizarLatex(el);
+    });
     document.querySelectorAll(".ql-formula").forEach(function (elemento) {
       try {
         katex.render(elemento.dataset.value, elemento, { throwOnError: false });

@@ -1,4 +1,6 @@
 from django import forms
+from django.db import transaction
+from django.db.models import Q
 
 from .models import Alternativa, Assunto, Disciplina, Frente, Questao
 from .sanitizacao import enunciado_esta_vazio, sanitizar_html_enunciado
@@ -121,6 +123,10 @@ class QuestaoForm(forms.ModelForm):
     rádio marcando a correta — em vez de um formset, que exigiria
     gerenciar management form e não dá pra impor "só uma marcada como
     certa" com naturalidade.
+
+    Com `instance`, edita uma questão existente: as alternativas são
+    regravadas por inteiro. O texto das alternativas aceita LaTeX entre
+    cifrões ($x^2$), renderizado com KaTeX na exibição.
     """
 
     assunto = forms.ModelChoiceField(
@@ -179,7 +185,12 @@ class QuestaoForm(forms.ModelForm):
             "frente", "frente__disciplina"
         ).order_by("frente__disciplina__nome", "frente__letra", "aula", "nome")
         if usuario is not None and not usuario.is_superuser:
-            queryset = queryset.filter(frente__professores=usuario)
+            filtro = Q(frente__professores=usuario)
+            # Editando: o assunto atual continua válido mesmo que a
+            # frente tenha sido retirada do professor depois.
+            if self.instance.pk:
+                filtro |= Q(pk=self.instance.assunto_id)
+            queryset = queryset.filter(filtro).distinct()
         self.fields["assunto"].queryset = queryset
 
         # Optgroup por "Disciplina — Frente", pra ficar claro de qual
@@ -193,6 +204,14 @@ class QuestaoForm(forms.ModelForm):
         self.fields["assunto"].choices = [
             (grupo, opcoes) for grupo, opcoes in agrupado.items()
         ]
+
+        # Editando: preenche alternativas e a correta a partir do banco.
+        if self.instance.pk and not self.is_bound:
+            for alternativa in self.instance.alternativas.all():
+                letra = alternativa.letra.lower()
+                self.initial[f"alternativa_{letra}"] = alternativa.texto
+                if alternativa.correta:
+                    self.initial["correta"] = letra
 
     def clean_enunciado(self):
         html_limpo = sanitizar_html_enunciado(self.cleaned_data.get("enunciado", ""))
@@ -231,12 +250,14 @@ class QuestaoForm(forms.ModelForm):
         if autor is not None:
             questao.autor = autor
         if commit:
-            questao.save()
-            self._salvar_alternativas(questao)
+            with transaction.atomic():
+                questao.save()
+                self._salvar_alternativas(questao)
         return questao
 
     def _salvar_alternativas(self, questao):
         correta = self.cleaned_data["correta"]
+        questao.alternativas.all().delete()
         Alternativa.objects.bulk_create(
             Alternativa(
                 questao=questao,
