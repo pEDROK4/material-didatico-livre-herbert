@@ -353,6 +353,46 @@ def adicionar_questao(request):
 
 
 @login_required
+def editar_questao(request, pk):
+    """
+    Edita uma questão já cadastrada, reaproveitando o formulário e a
+    tela de cadastro. Só o autor da questão ou a coordenação pode editar.
+    """
+    questao = get_object_or_404(
+        Questao.objects.select_related("assunto__frente__disciplina"), pk=pk
+    )
+    usuario = request.user
+    if not (usuario.is_superuser or questao.autor_id == usuario.pk):
+        messages.error(request, "Você só pode editar as questões que cadastrou.")
+        return redirect("core:questoes_listar")
+
+    enunciado_inicial = questao.enunciado
+    if request.method == "POST":
+        form = QuestaoForm(request.POST, instance=questao, usuario=usuario)
+        if form.is_valid():
+            form.save()
+            messages.success(request, "Questão atualizada com sucesso.")
+            return redirect("core:questoes_listar")
+        enunciado_inicial = sanitizar_html_enunciado(request.POST.get("enunciado", ""))
+    else:
+        form = QuestaoForm(instance=questao, usuario=usuario)
+
+    return render(
+        request,
+        "questoes/adicionar_questao.html",
+        {
+            "form": form,
+            "tem_assunto_disponivel": True,
+            "enunciado_inicial": enunciado_inicial,
+            "alternativas_com_letra": [
+                (letra, form[f"alternativa_{letra}"]) for letra in LETRAS_ALTERNATIVAS
+            ],
+            "editando": questao,
+        },
+    )
+
+
+@login_required
 def listar_questoes(request):
     """
     Lista todas as questões cadastradas, de qualquer professor e

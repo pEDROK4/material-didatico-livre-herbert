@@ -1,6 +1,6 @@
 {% extends "core/layout_painel.html" %}
 {% load core_icons static %}
-{% block title %}Adicionar questão — Material Didático{% endblock %}
+{% block title %}{% if editando %}Editar{% else %}Adicionar{% endif %} questão — Material Didático{% endblock %}
 
 {% block extra_head %}
   <link rel="stylesheet" href="{% static 'vendor/quill/quill.snow.css' %}">
@@ -13,13 +13,15 @@
     .linha-alternativa input[type=radio] { margin-top: 0.75rem; width: 1.1rem; height: 1.1rem; flex-shrink: 0; }
     .linha-alternativa .campo { flex: 1; margin-bottom: 0; }
     .linha-alternativa label.rotulo-letra { width: 1.6rem; flex-shrink: 0; margin-top: 0.6rem; text-align: center; font-weight: 700; }
+    .previa-latex { font-size: 0.9rem; margin-top: 0.25rem; min-height: 0; color: var(--cor-texto-suave, #555); }
+    .previa-latex:empty { display: none; }
     fieldset { border: none; padding: 0; margin: 0 0 1.25rem; }
     fieldset legend { font-weight: 600; font-size: 0.9rem; margin-bottom: 0.4rem; padding: 0; }
   </style>
 {% endblock %}
 
 {% block conteudo_painel %}
-  <h1 style="font-size: 1.4rem; margin-top: 0; margin-bottom: 0.15rem;">Adicionar questão</h1>
+  <h1 style="font-size: 1.4rem; margin-top: 0; margin-bottom: 0.15rem;">{% if editando %}Editar questão #{{ editando.pk }}{% else %}Adicionar questão{% endif %}</h1>
   <p class="texto-suave" style="margin-top: 0;">Só aparecem os assuntos das frentes atribuídas a você.</p>
 
   {% for message in messages %}
@@ -90,14 +92,20 @@
                    {% if form.correta.value == letra %}checked{% endif %} required>
             <div class="campo">
               {{ campo }}
+              <div class="previa-latex" data-previa-de="{{ campo.id_for_label }}"></div>
               {% for erro in campo.errors %}<span class="erro">{{ erro }}</span>{% endfor %}
             </div>
           </div>
         {% endfor %}
+        <p class="texto-suave" style="font-size: 0.8rem; margin-top: 0.4rem;">
+          Para fórmulas use LaTeX entre cifrões: <code>$x^2 + 1$</code> (na linha) ou
+          <code>$$\frac{a}{b}$$</code> (em destaque). A prévia aparece abaixo do campo.
+        </p>
         {% for erro in form.correta.errors %}<span class="erro">{{ erro }}</span>{% endfor %}
       </fieldset>
 
-      <button type="submit">Salvar questão</button>
+      <button type="submit">{% if editando %}Salvar alterações{% else %}Salvar questão{% endif %}</button>
+      {% if editando %}<a href="{% url 'core:questoes_listar' %}" style="margin-left: 1rem;">Cancelar</a>{% endif %}
     </form>
 
   {% endif %}
@@ -107,6 +115,7 @@
 {% if tem_assunto_disponivel %}
   <script src="{% static 'vendor/katex/katex.min.js' %}"></script>
   <script src="{% static 'vendor/quill/quill.js' %}"></script>
+  <script src="{% static 'js/latex_alternativas.js' %}"></script>
   <script>
     (function () {
       function lerCookie(nome) {
@@ -217,6 +226,17 @@
       }
       checkboxAutoria.addEventListener("change", atualizarBlocoVestibular);
       atualizarBlocoVestibular();
+
+      document.querySelectorAll(".previa-latex").forEach((previa) => {
+        const campo = document.getElementById(previa.dataset.previaDe);
+        const atualizar = () => {
+          const texto = campo.value;
+          if (texto.indexOf("$") === -1) previa.textContent = "";
+          else window.renderizarLatex(previa, texto);
+        };
+        campo.addEventListener("input", atualizar);
+        atualizar();
+      });
 
       document.getElementById("form-questao").addEventListener("submit", () => {
         document.getElementById("{{ form.enunciado.id_for_label }}").value = quill.root.innerHTML;
