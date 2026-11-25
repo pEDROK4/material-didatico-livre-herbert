@@ -36,6 +36,11 @@ urlpatterns = [
         name="questoes_editar",
     ),
     path(
+        "painel/questoes/<int:pk>/excluir/",
+        questoes_views.excluir_questao,
+        name="questoes_excluir",
+    ),
+    path(
         "painel/questoes/upload-imagem/",
         questoes_views.upload_imagem_editor,
         name="upload_imagem_editor",

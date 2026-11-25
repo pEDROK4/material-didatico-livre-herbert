@@ -248,3 +248,67 @@ class EditarQuestaoTests(TestCase):
         self.client.post(self.url, self.dados())
         self.questao.refresh_from_db()
         self.assertEqual(self.questao.enunciado, "<p>Novo</p>")
+
+
+@override_settings(
+    STORAGES={
+        "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+        "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
+    }
+)
+class ExcluirQuestaoTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        frente = Frente.objects.get(disciplina__nome="Biologia", letra="A")
+        cls.assunto = Assunto.objects.create(frente=frente, nome="Células", aula=1)
+        cls.autor = Usuario.objects.create_user("autor", password="x")
+        cls.outro = Usuario.objects.create_user("outro", password="x")
+        cls.coord = Usuario.objects.create_superuser("coord", password="x")
+
+    def setUp(self):
+        self.questao = Questao.objects.create(
+            assunto=self.assunto, enunciado="<p>Q</p>", autor=self.autor
+        )
+        Alternativa.objects.create(questao=self.questao, letra="A", texto="a", correta=True)
+        self.url = reverse("core:questoes_excluir", args=[self.questao.pk])
+        self.listagem = reverse("core:questoes_listar")
+
+    def test_autor_exclui_e_alternativas_caem_junto(self):
+        self.client.force_login(self.autor)
+        resposta = self.client.post(self.url)
+        self.assertRedirects(resposta, self.listagem)
+        self.assertFalse(Questao.objects.filter(pk=self.questao.pk).exists())
+        self.assertFalse(Alternativa.objects.filter(questao_id=self.questao.pk).exists())
+
+    def test_coordenacao_exclui(self):
+        self.client.force_login(self.coord)
+        self.client.post(self.url)
+        self.assertFalse(Questao.objects.filter(pk=self.questao.pk).exists())
+
+    def test_outro_professor_nao_exclui(self):
+        self.client.force_login(self.outro)
+        self.client.post(self.url)
+        self.assertTrue(Questao.objects.filter(pk=self.questao.pk).exists())
+
+    def test_get_nao_exclui(self):
+        self.client.force_login(self.autor)
+        resposta = self.client.get(self.url)
+        self.assertEqual(resposta.status_code, 405)
+        self.assertTrue(Questao.objects.filter(pk=self.questao.pk).exists())
+
+    def test_anonimo_nao_exclui(self):
+        self.client.post(self.url)
+        self.assertTrue(Questao.objects.filter(pk=self.questao.pk).exists())
+
+    def test_volta_para_a_listagem_com_os_filtros(self):
+        self.client.force_login(self.autor)
+        resposta = self.client.post(self.url, {"proximo": "?busca=abc&pagina=2"})
+        self.assertRedirects(
+            resposta, f"{self.listagem}?busca=abc&pagina=2", fetch_redirect_response=False
+        )
+
+    def test_botao_so_aparece_para_quem_pode(self):
+        self.client.force_login(self.outro)
+        self.assertNotContains(self.client.get(self.listagem), self.url)
+        self.client.force_login(self.autor)
+        self.assertContains(self.client.get(self.listagem), self.url)

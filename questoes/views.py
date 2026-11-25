@@ -9,6 +9,7 @@ from django.db import transaction
 from django.db.models import Count, Prefetch
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.views.decorators.http import require_POST
 from PIL import Image, UnidentifiedImageError
 
@@ -390,6 +391,33 @@ def editar_questao(request, pk):
             "editando": questao,
         },
     )
+
+
+@login_required
+@require_POST
+def excluir_questao(request, pk):
+    """
+    Exclui uma questão já cadastrada. Mesma regra da edição: só o autor
+    da questão ou a coordenação pode excluir. Só aceita POST (com CSRF),
+    nunca GET, pra um link ou prefetch não apagar nada sem querer. As
+    alternativas e as imagens anexadas caem junto (on_delete=CASCADE).
+    """
+    questao = get_object_or_404(Questao, pk=pk)
+    usuario = request.user
+    if not (usuario.is_superuser or questao.autor_id == usuario.pk):
+        messages.error(request, "Você só pode excluir as questões que cadastrou.")
+        return redirect("core:questoes_listar")
+
+    numero = questao.pk
+    questao.delete()
+    messages.success(request, f"Questão #{numero} excluída.")
+
+    # Volta pra listagem mantendo os filtros e a página em que a pessoa
+    # estava, desde que o endereço seja mesmo da nossa listagem.
+    destino = request.POST.get("proximo", "")
+    if destino.startswith("?"):
+        return redirect(f"{reverse('core:questoes_listar')}{destino}")
+    return redirect("core:questoes_listar")
 
 
 @login_required

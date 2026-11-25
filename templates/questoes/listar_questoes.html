@@ -23,6 +23,10 @@
     .lista-alternativas li.correta { background: #e6f7ec; color: var(--cor-sucesso); font-weight: 600; }
     .grade-filtros { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; align-items: end; }
     .grade-filtros .campo { margin-bottom: 0; }
+    .link-excluir {
+      background: none; border: 0; padding: 0; margin: 0; width: auto;
+      font: inherit; color: var(--cor-erro, #b00020); cursor: pointer; text-decoration: underline;
+    }
     .paginacao { display: flex; gap: 1rem; justify-content: center; align-items: center; margin-top: 1.5rem; font-size: 0.9rem; }
   </style>
 {% endblock %}
@@ -122,6 +126,12 @@
           Cadastrada por {{ questao.autor }} em {{ questao.criado_em|date:"d/m/Y" }}
           {% if request.user.is_superuser or questao.autor_id == request.user.pk %}
             · <a href="{% url 'core:questoes_editar' questao.pk %}">Editar</a>
+            ·
+            <form method="post" action="{% url 'core:questoes_excluir' questao.pk %}" class="form-excluir" style="display: inline;">
+              {% csrf_token %}
+              <input type="hidden" name="proximo" value="{% if request.GET %}?{{ request.GET.urlencode }}{% endif %}">
+              <button type="submit" class="link-excluir">Excluir</button>
+            </form>
           {% endif %}
         </p>
       </article>
@@ -147,6 +157,13 @@
   <script src="{% static 'vendor/katex/katex.min.js' %}"></script>
   <script src="{% static 'js/latex_alternativas.js' %}"></script>
   <script>
+    document.querySelectorAll(".form-excluir").forEach(function (form) {
+      form.addEventListener("submit", function (evento) {
+        if (!confirm("Excluir esta questão? Essa ação não pode ser desfeita.")) {
+          evento.preventDefault();
+        }
+      });
+    });
     document.querySelectorAll(".texto-alternativa").forEach(function (el) {
       if (el.textContent.indexOf("$") !== -1) window.renderizarLatex(el);
     });
