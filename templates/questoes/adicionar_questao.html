@@ -1,5 +1,5 @@
 {% extends "core/layout_painel.html" %}
-{% load core_icons static %}
+{% load core_icons static questoes_extras %}
 {% block title %}{% if editando %}Editar{% else %}Adicionar{% endif %} questão — Material Didático{% endblock %}
 
 {% block extra_head %}
@@ -74,7 +74,7 @@
 
       <div class="campo">
         <label>Enunciado</label>
-        <div id="editor-enunciado">{{ enunciado_inicial|safe }}</div>
+        <div id="editor-enunciado">{{ enunciado_inicial|enunciado_html }}</div>
         {{ form.enunciado }}
         {% for erro in form.enunciado.errors %}<span class="erro">{{ erro }}</span>{% endfor %}
         <p class="texto-suave" style="font-size: 0.8rem; margin-top: 0.4rem;">

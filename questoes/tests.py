@@ -312,3 +312,52 @@ class ExcluirQuestaoTests(TestCase):
         self.assertNotContains(self.client.get(self.listagem), self.url)
         self.client.force_login(self.autor)
         self.assertContains(self.client.get(self.listagem), self.url)
+
+
+class RenovarUrlsImagensTests(TestCase):
+    """
+    No Spaces a URL de upload é assinada e expira; ao exibir, o endereço
+    das imagens do editor precisa ser refeito com assinatura nova.
+    """
+
+    def renovar(self, html):
+        from unittest import mock
+
+        from .templatetags.questoes_extras import renovar_urls_imagens
+
+        with mock.patch(
+            "questoes.templatetags.questoes_extras.default_storage.url",
+            side_effect=lambda chave: f"https://novo.exemplo/{chave}?assinatura=NOVA",
+        ):
+            return renovar_urls_imagens(html)
+
+    def test_url_assinada_expirada_do_spaces_e_refeita(self):
+        antigo = (
+            '<p>x</p><img src="https://bucket.nyc3.digitaloceanspaces.com/'
+            'questoes/editor/abc123.png?X-Amz-Expires=3600&amp;X-Amz-Signature=velha">'
+        )
+        saida = self.renovar(antigo)
+        self.assertIn("https://novo.exemplo/questoes/editor/abc123.png?assinatura=NOVA", saida)
+        self.assertNotIn("velha", saida)
+
+    def test_url_no_estilo_path_do_spaces_tambem(self):
+        saida = self.renovar(
+            '<img src="https://nyc3.digitaloceanspaces.com/meu-bucket/questoes/editor/x.jpg?a=1">'
+        )
+        self.assertIn("https://novo.exemplo/questoes/editor/x.jpg?assinatura=NOVA", saida)
+
+    def test_url_local_media_continua_funcionando(self):
+        saida = self.renovar('<img src="/media/questoes/editor/x.png">')
+        self.assertIn("questoes/editor/x.png?assinatura=NOVA", saida)
+
+    def test_imagem_de_outro_site_nao_e_mexida(self):
+        html = '<img src="https://outro-site.com/questoes/editor/x.png">'
+        self.assertEqual(self.renovar(html), html)
+
+    def test_imagem_data_uri_nao_e_mexida(self):
+        html = '<img src="data:image/png;base64,AAAA">'
+        self.assertEqual(self.renovar(html), html)
+
+    def test_html_sem_imagem_volta_igual(self):
+        html = "<p>texto <strong>puro</strong></p>"
+        self.assertEqual(self.renovar(html), html)
